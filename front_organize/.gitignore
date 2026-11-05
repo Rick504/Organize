@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+data/
+uploads/
+.vercel/
+*.log
+*.tsbuildinfo
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
