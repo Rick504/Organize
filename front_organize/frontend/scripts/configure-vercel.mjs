@@ -20,6 +20,8 @@ if (url.protocol !== 'https:' || url.pathname !== '/' || url.search || url.hash 
 
 const config = {
   $schema: 'https://openapi.vercel.sh/vercel.json',
+  buildCommand: 'npm run build',
+  outputDirectory: 'dist',
   rewrites: [
     { source: '/api/:path*', destination: `${url.origin}/api/:path*` },
     { source: '/(.*)', destination: '/index.html' }
