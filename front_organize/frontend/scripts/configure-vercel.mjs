@@ -21,6 +21,7 @@ if (url.protocol !== 'https:' || url.pathname !== '/' || url.search || url.hash 
 const config = {
   $schema: 'https://openapi.vercel.sh/vercel.json',
   buildCommand: 'npm run build',
+  ignoreCommand: 'if [ -n "$VERCEL_GIT_PREVIOUS_SHA" ]; then git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- .; else exit 1; fi',
   outputDirectory: 'dist',
   rewrites: [
     { source: '/api/:path*', destination: `${url.origin}/api/:path*` },

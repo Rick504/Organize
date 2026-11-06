@@ -1,6 +1,17 @@
 # Publicar o Organize: Railway + Vercel
 
-O repositório contém dois projetos independentes. A Railway executa somente `backend_organize/`; a Vercel publica somente `front_organize/frontend/`. O banco SQLite e os anexos ficam no volume da Railway.
+O repositório GitHub continua único, com dois serviços e deploys independentes. A Railway executa somente `backend_organize/`; a Vercel publica somente `front_organize/frontend/`. O banco SQLite e os anexos ficam no volume da Railway.
+
+## Deploys independentes no mesmo repositório
+
+O **Root Directory escolhe o código que será construído**, mas sozinho não impede que um commit na outra pasta acione um deploy. Configure os dois filtros no painel:
+
+1. **Railway → serviço do backend → Settings → Source:** mantenha **Root Directory** `/backend_organize` e adicione em **Watch Paths** o padrão `/backend_organize/**`. Salve as alterações pendentes da Railway. Um commit que altere somente `front_organize/` deve aparecer como ignorado no histórico do backend.
+2. **Vercel → projeto do frontend → Settings → Build and Deployment:** mantenha **Root Directory** `front_organize/frontend`, **Build Command** `npm run build` e **Output Directory** `dist`. O arquivo `front_organize/frontend/vercel.json` já define `ignoreCommand` para comparar apenas a pasta do frontend com o último deploy bem-sucedido desse projeto e ramo. Em **Settings → Environment Variables**, deixe **Automatically expose System Environment Variables** habilitado para disponibilizar `VERCEL_GIT_PREVIOUS_SHA`. Confirme no deploy que a Vercel leu o `vercel.json`. Um commit que altere somente `backend_organize/` deve cancelar o build do frontend.
+
+Este repositório tem dois `package.json` separados, sem um workspace npm na raiz. Por isso, não conte com a opção automática da Vercel de ignorar projetos não afetados, que exige workspaces. O **Ignored Build Step** atende a esta estrutura, mas builds cancelados ainda podem contar na cota de deploy da Vercel. O Watch Path da Railway precisa ser configurado no painel; o `ignoreCommand` da Vercel já está no código. Se a Vercel não informar o SHA anterior ou não tiver esse commit no clone, o comando permite o build para evitar ignorar alterações necessárias.
+
+Depois de configurar, faça dois commits pequenos para conferir: um alterando só `front_organize/frontend/` e outro só `backend_organize/`. O primeiro deve iniciar apenas a Vercel; o segundo, apenas a Railway. Faça os commits na raiz do Git (`C:\Users\Rick\Documents\Projetos\Organize`).
 
 ## 1. Valide localmente
 
@@ -18,7 +29,7 @@ No PowerShell, `npm.cmd` evita o bloqueio de `npm.ps1` pela política de execuç
 
 ## 2. Backend na Railway
 
-Conecte o repositório GitHub ao serviço de backend. Em **Settings → Source**, defina **Root Directory** como `/backend_organize`. No deploy, use **Start Command** `npm start`, Node.js 24 e **Healthcheck Path** `/api/health`. Não configure um build do frontend nesse serviço.
+Conecte o repositório GitHub ao serviço de backend. Em **Settings → Source**, defina **Root Directory** como `/backend_organize` e **Watch Paths** como `/backend_organize/**`. No deploy, use **Start Command** `npm start`, Node.js 24 e **Healthcheck Path** `/api/health`. Não configure um build do frontend nesse serviço.
 
 Mantenha ou anexe um volume com ponto de montagem `/data`. Se o serviço já usa esse volume, a mudança de pastas no repositório não altera os dados que estão nele. Configure estas variáveis no serviço:
 
@@ -37,7 +48,7 @@ Se publicar pela CLI a partir da raiz do repositório, use `railway.cmd up ./bac
 
 ## 3. Frontend na Vercel
 
-Importe o mesmo repositório como outro projeto e defina **Root Directory** `front_organize/frontend`, **Build Command** `npm run build` e **Output Directory** `dist`. O arquivo [frontend/vercel.json](../frontend/vercel.json) encaminha `/api/*` para o domínio Railway informado acima e entrega `index.html` nas rotas da interface. Aponte-o para o domínio ativo antes do deploy.
+Importe o mesmo repositório como outro projeto e defina **Root Directory** `front_organize/frontend`, **Build Command** `npm run build` e **Output Directory** `dist`. O arquivo [frontend/vercel.json](../frontend/vercel.json) define o Ignored Build Step, encaminha `/api/*` para o domínio Railway informado acima e entrega `index.html` nas rotas da interface. Aponte-o para o domínio ativo antes do deploy.
 
 Se o domínio da Railway mudar, execute dentro de `front_organize/frontend/`:
 
@@ -60,4 +71,4 @@ Os dados locais em `backend_organize/data/` não são enviados automaticamente �
 
 O Organize ainda está em desenvolvimento; veja [a matriz de paridade](PARIDADE.md) para recursos incompletos e o [README](../README.md) para execução local.
 
-Documentação das plataformas: [Railway monorepo](https://docs.railway.com/deployments/monorepo), [Railway CLI](https://docs.railway.com/cli/deploying), [Vercel monorepo](https://vercel.com/docs/monorepos) e [Vercel rewrites](https://vercel.com/docs/routing/rewrites).
+Documentação das plataformas: [Railway monorepo e Watch Paths](https://docs.railway.com/deployments/monorepo), [Railway CLI](https://docs.railway.com/cli/deploying), [Vercel Ignored Build Step](https://vercel.com/docs/project-configuration/project-settings), [Vercel monorepo](https://vercel.com/docs/monorepos) e [Vercel rewrites](https://vercel.com/docs/routing/rewrites).

@@ -29,7 +29,7 @@ Configure a **Root Directory** do projeto Vercel como `front_organize/frontend`,
 node scripts/configure-vercel.mjs https://organize-production-b9ef.up.railway.app
 ```
 
-O `vercel.json` deste repositório já está configurado com o domínio Railway acima. Revise e inclua o arquivo no Git antes do deploy pela Vercel. Configure no backend Railway `ORGANIZE_PUBLIC_ORIGIN=https://organize-gray.vercel.app`. Use a URL exata, sem barra final. O proxy é necessário para que a sessão por cookie permaneça na origem do frontend. Teste login, logout, criação de cartão, upload e eventos em tempo real no domínio publicado.
+O `vercel.json` deste repositório já está configurado com o domínio Railway acima e com `ignoreCommand` para cancelar builds quando o commit altera somente outras pastas do Git. Revise e inclua o arquivo no Git antes do deploy pela Vercel. Configure no backend Railway `ORGANIZE_PUBLIC_ORIGIN=https://organize-gray.vercel.app`. Use a URL exata, sem barra final. O proxy é necessário para que a sessão por cookie permaneça na origem do frontend. Teste login, logout, criação de cartão, upload e eventos em tempo real no domínio publicado.
 
 Em 24/10/2026, `https://organize-gray.vercel.app/` abriu, mas `/api/health` respondeu `NOT_FOUND`; o domínio Railway respondeu `Application not found`. Publique a estrutura nova em ambos os serviços e confirme o último deploy antes de testar login.
 
