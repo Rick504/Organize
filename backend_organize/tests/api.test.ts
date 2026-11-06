@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,8 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 test('registro, quadro privado, listas, cartões, movimentação, convite e colaboração', async () => {
  const dataDir=mkdtempSync(join(tmpdir(),'organize-api-'));
  const port=34000+Math.floor(Math.random()*20000);
- const distDir=join(dataDir,'dist'); mkdirSync(distDir); writeFileSync(join(distDir,'index.html'),'<html>Organize</html>'); writeFileSync(join(distDir,'app.css'),'body{}');
- process.env.PORT=String(port); process.env.ORGANIZE_DATA_DIR=dataDir; process.env.ORGANIZE_DIST_DIR=distDir;
+ process.env.PORT=String(port); process.env.ORGANIZE_DATA_DIR=dataDir; process.env.ORGANIZE_PUBLIC_ORIGIN='http://localhost:5173';
  const { server }=await import('../index.ts');
  const { db }=await import('../db.ts');
  const base=`http://localhost:${port}/api`;
@@ -27,8 +26,8 @@ test('registro, quadro privado, listas, cartões, movimentação, convite e cola
  try {
   await wait();
   let anonymous=await api({cookie:''},'GET','/bootstrap'); assert.equal(anonymous.status,401);
-  let staticResponse=await fetch(`http://localhost:${port}/b/test`); assert.equal(staticResponse.status,200); assert.match(await staticResponse.text(),/Organize/);
-  staticResponse=await fetch(`http://localhost:${port}/app.css`); assert.equal(staticResponse.status,200); assert.equal(staticResponse.headers.get('content-type'),'text/css; charset=utf-8');
+  const frontendResponse=await fetch(`http://localhost:${port}/b/test`); assert.equal(frontendResponse.status,404);
+  const allowedOrigin=await fetch(`${base}/auth/logout`,{method:'POST',headers:{Origin:'http://localhost:5173'}}); assert.equal(allowedOrigin.status,200);
   let r=await api(a,'POST','/auth/register',{name:'Ana',email:'ana@example.test',password:'senha-forte-1'});
   assert.equal(r.status,201); const anaId=r.data.user.id;
   const crossOrigin=await fetch(`${base}/boards`,{method:'POST',headers:{Cookie:a.cookie,Origin:'https://site-invasor.test','Content-Type':'application/json'},body:JSON.stringify({workspaceId:'x',title:'Negado'})});
@@ -124,6 +123,7 @@ test('registro, quadro privado, listas, cartões, movimentação, convite e cola
   r=await api(a,'POST',`/cards/${cardId}/attachments`,{name:'nota.txt',mime:'text/plain',dataBase64:Buffer.from('conteúdo real').toString('base64')});
   assert.equal(r.status,201); assert.equal(r.data.attachment.path,undefined);
   const attachmentId=r.data.attachment.id;
+  db.prepare('UPDATE attachments SET path=? WHERE id=?').run(join(dataDir,'legacy','uploads',attachmentId),attachmentId);
   const download=await fetch(`${base}/attachments/${attachmentId}/download`,{headers:{Cookie:b.cookie}});
   assert.equal(download.status,200); assert.equal(await download.text(),'conteúdo real');
   const deniedDownload=await fetch(`${base}/attachments/${attachmentId}/download`); assert.equal(deniedDownload.status,401);

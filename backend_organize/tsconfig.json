@@ -10,5 +10,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["server"]
+  "include": ["index.ts", "db.ts", "seed.ts", "tests"]
 }

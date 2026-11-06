@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, statSync } from 'node:fs';
-import { join, resolve, relative, extname, sep } from 'node:path';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import { URL } from 'node:url';
 import { all, dataDir, db, maxPosition, now, one, run, transaction, uid, type Row } from './db.ts';
 
@@ -10,7 +10,11 @@ const PORT = Number(process.env.PORT || 3001);
 const SESSION_AGE = 30 * 24 * 60 * 60 * 1000;
 const UPLOAD_MAX = 8 * 1024 * 1024;
 const uploadsDir = join(dataDir, 'uploads');
-const distDir=resolve(process.env.ORGANIZE_DIST_DIR||join(process.cwd(),'dist'));
+const publicOrigin = process.env.ORGANIZE_PUBLIC_ORIGIN?.replace(/\/$/, '');
+if (publicOrigin) {
+ const parsed = new URL(publicOrigin);
+ if (parsed.origin !== publicOrigin || (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:')) throw new Error('ORGANIZE_PUBLIC_ORIGIN deve ser uma origem HTTPS sem caminho em produção.');
+}
 mkdirSync(uploadsDir, { recursive: true });
 
 class HttpError extends Error { status: number; constructor(status: number, message: string) { super(message); this.status=status; } }
@@ -75,26 +79,12 @@ function send(res: ServerResponse, data: unknown, status = 200): void {
  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
  res.end(JSON.stringify(data));
 }
-function serveStatic(req: IncomingMessage,res: ServerResponse,url: URL): void {
- if(!['GET','HEAD'].includes(req.method||'')) return fail(405,'Método não permitido');
- if(!existsSync(distDir)) return fail(404,'Aplicação ainda não compilada');
- let requested:string;
- try { requested=decodeURIComponent(url.pathname); } catch { return fail(400,'Caminho inválido'); }
- if(requested.includes('\\')||requested.split('/').includes('..')) return fail(403,'Caminho inválido');
- const path=resolve(distDir,`.${requested}`);
- const rel=relative(distDir,path);
- if(rel==='..'||rel.startsWith(`..${sep}`)||rel.startsWith(sep)) return fail(403,'Caminho inválido');
- let target=path;
- if(!existsSync(target)||!statSync(target).isFile()) {
-  if(extname(requested)) return fail(404,'Arquivo não encontrado');
-  target=join(distDir,'index.html');
- }
- if(!existsSync(target)) return fail(404,'Aplicação ainda não compilada');
- const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.wasm':'application/wasm','.txt':'text/plain; charset=utf-8'};
- const content=readFileSync(target);
- const revalidate = ['index.html','sw.js','manifest.webmanifest','offline.html'].includes(target.split(sep).at(-1) || '');
- res.writeHead(200,{'Content-Type':mime[extname(target).toLowerCase()]||'application/octet-stream','Content-Length':content.length,'Cache-Control':revalidate?'no-cache':'public, max-age=3600','X-Content-Type-Options':'nosniff'});
- res.end(req.method==='HEAD'?undefined:content);
+function attachmentPath(attachment: Row): string | null {
+ if (!attachment.path) return null;
+ const stored = String(attachment.path);
+ if (stored !== String(attachment.id) && existsSync(stored)) return stored;
+ const current = join(uploadsDir, String(attachment.id));
+ return existsSync(current) ? current : null;
 }
 function cookie(req: IncomingMessage, key: string): string | undefined {
  const match = (req.headers.cookie || '').split(';').map(item => item.trim()).find(item => item.startsWith(`${key}=`));
@@ -138,9 +128,10 @@ function csrf(req: IncomingMessage): void {
  if (!['POST','PATCH','PUT','DELETE'].includes(req.method || '')) return;
  const origin = req.headers.origin;
  if (origin) {
-  let host: string;
-  try { host=new URL(origin).host; } catch { return fail(403,'Origem não autorizada'); }
-  if(host!==req.headers.host) fail(403,'Origem não autorizada');
+  let parsed: URL;
+  try { parsed=new URL(origin); } catch { return fail(403,'Origem não autorizada'); }
+  const sameHost = parsed.host === req.headers.host;
+  if (!sameHost && parsed.origin !== publicOrigin) fail(403,'Origem não autorizada');
  }
 }
 function httpUrl(value: unknown, label: string): string {
@@ -274,7 +265,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
  const path = url.pathname;
  const method = req.method || 'GET';
  const parts = path.split('/').filter(Boolean);
- if (parts[0] !== 'api') return serveStatic(req,res,url);
+ if (parts[0] !== 'api') return fail(404, 'Rota não encontrada');
  const body = ['POST','PATCH','PUT'].includes(method) ? await readBody(req) : {};
 
  // Auth and account
@@ -425,7 +416,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
    run('INSERT INTO invites(id,workspace_id,board_id,email,role,token_hash,invited_by,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?,?)',inviteId,id,boardId,email,inviteRole,tokenHash(token),user.id,expiresAt,now());
    const recipient=one('SELECT id FROM users WHERE email=?',email);
    if (recipient) notify(recipient.id,'invite',{workspaceId:id,inviteId});
-   return send(res,{invite:{id:inviteId,workspaceId:id,boardId,email,role:inviteRole,expiresAt,token,inviteUrl:`${url.origin}/invite/${token}`}},201);
+   return send(res,{invite:{id:inviteId,workspaceId:id,boardId,email,role:inviteRole,expiresAt,token,inviteUrl:`${publicOrigin || url.origin}/invite/${token}`}},201);
   }
   if (method === 'GET' && parts[3] === 'invites') {
    const role=workspaceRole(id,user.id); if (!['owner','admin'].includes(role||'')) fail(403,'Permissão insuficiente');
@@ -701,7 +692,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     if (typeof body.dataBase64!=='string'||body.dataBase64.length>UPLOAD_MAX*1.4) fail(413,'Arquivo muito grande');
     const buffer=Buffer.from(body.dataBase64,'base64');
     if (!buffer.length||buffer.length>UPLOAD_MAX) fail(413,'Arquivo inválido ou muito grande');
-    diskPath=join(uploadsDir,id); writeFileSync(diskPath,buffer,{flag:'wx'}); size=buffer.length;
+    diskPath=id; writeFileSync(join(uploadsDir,id),buffer,{flag:'wx'}); size=buffer.length;
     mime=optional(body.mime,'Tipo',100)||'application/octet-stream';
    } else fail(400,'Informe URL ou dataBase64');
    run('INSERT INTO attachments(id,card_id,name,url,path,mime,size,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)',id,cardId,name,attachmentUrl,diskPath,mime,size,user.id,now());
@@ -766,12 +757,13 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   const [attachment,card,board]=cardFromChild('attachments',parts[2],user.id,method==='DELETE');
   if (method==='GET' && parts[3]==='download') {
    if (attachment.url) { res.writeHead(302,{Location:attachment.url,'Cache-Control':'no-store'}); res.end(); return; }
-   if (!attachment.path||!existsSync(attachment.path)) fail(404,'Arquivo não encontrado');
-   const content=readFileSync(attachment.path);
+   const filePath=attachmentPath(attachment);
+   if (!filePath) return fail(404,'Arquivo não encontrado');
+   const content=readFileSync(filePath);
    res.writeHead(200,{'Content-Type':attachment.mime||'application/octet-stream','Content-Length':content.length,'Content-Disposition':`attachment; filename="${attachment.name.replace(/["\\\r\n]/g,'_')}"`,'X-Content-Type-Options':'nosniff'});
    res.end(content); return;
   }
-  if (method==='DELETE') { run('DELETE FROM attachments WHERE id=?',attachment.id); if(attachment.path&&existsSync(attachment.path)) unlinkSync(attachment.path); emitBoard(board,'attachment.deleted',card.id); return send(res,{ok:true}); }
+  if (method==='DELETE') { const filePath=attachmentPath(attachment); run('DELETE FROM attachments WHERE id=?',attachment.id); if(filePath) unlinkSync(filePath); emitBoard(board,'attachment.deleted',card.id); return send(res,{ok:true}); }
  }
  if (parts[1]==='labels' && parts[2]) {
   const [label,board]=parentBoard('labels',parts[2],user.id,true);

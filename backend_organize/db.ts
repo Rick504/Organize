@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 export type Row = Record<string, any>;
 export const uid = () => randomUUID();
 export const now = () => new Date().toISOString();
-export const dataDir = process.env.ORGANIZE_DATA_DIR || join(process.cwd(), 'server', 'data');
+export const dataDir = process.env.ORGANIZE_DATA_DIR || join(import.meta.dirname, 'data');
 const dbPath = process.env.ORGANIZE_DB_PATH || join(dataDir, 'organize.sqlite');
 mkdirSync(dirname(dbPath), { recursive: true });
 export const db = new DatabaseSync(dbPath);

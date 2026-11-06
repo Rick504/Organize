@@ -1,33 +1,34 @@
 # Organize API
 
-Servidor Node.js 24 com TypeScript, `node:sqlite`, arquivos locais e Server Sent Events (SSE). Nenhum serviço externo é necessário para executar os fluxos principais.
+API independente em Node.js 24 e TypeScript, com `node:sqlite`, arquivos locais e Server Sent Events (SSE). A interface está em [front_organize/frontend](../front_organize/frontend/README.md).
 
 ## Execução
 
-Na raiz do projeto:
+Dentro da pasta `backend_organize/`:
 
 ```sh
-npm install
-node server/seed.ts
-npm run dev
+npm.cmd ci
+npm.cmd run seed
+npm.cmd run dev
 ```
 
 O servidor escuta em `http://localhost:3001`. Variáveis opcionais:
 
 - `PORT`: porta HTTP (padrão `3001`).
-- `ORGANIZE_DATA_DIR`: diretório do SQLite e dos uploads (padrão `server/data`).
+- `ORGANIZE_DATA_DIR`: diretório do SQLite e dos uploads (padrão `backend_organize/data`, independente da pasta de execução).
 - `ORGANIZE_DB_PATH`: caminho específico do banco.
+- `ORGANIZE_PUBLIC_ORIGIN`: origem da interface, como `http://localhost:5173` ou a URL HTTPS da Vercel. Autoriza as escritas encaminhadas pelo proxy e gera links de convite apontando para a interface.
 - `NODE_ENV=production`: marca o cookie de sessão como `Secure`; sirva por HTTPS.
 
-Dados de exemplo: `ana@organize.local` e `bruno@organize.local`, senha `Organize123!`. `node server/seed.ts` é idempotente.
+Dados de exemplo: `ana@organize.local` e `bruno@organize.local`, senha `Organize123!`. `npm.cmd run seed` é idempotente. Não execute o seed no ambiente público.
 
-Teste da API: `node --test --test-isolation=none server/tests/api.test.ts`. O teste usa banco temporário e verifica autenticação, criação e movimentação de cartões, permissões, convite, comentários, checklist, SSE e importação/exportação.
+Teste da API: `npm.cmd test`. O teste usa banco temporário e verifica autenticação, criação e movimentação de cartões, permissões, convite, comentários, checklist, SSE e importação/exportação.
 
 ## Convenções
 
 - Todas as rotas abaixo começam com `/api`; corpos e respostas são JSON em camelCase.
 - A sessão usa cookie `organize_session` HttpOnly, SameSite=Lax, expiração de 30 dias, token aleatório armazenado como SHA-256. Senhas usam scrypt com sal individual.
-- Escritas com cabeçalho `Origin` de outro host são rejeitadas. Envie requests pelo mesmo host do frontend (o Vite encaminha `/api`).
+- Escritas com cabeçalho `Origin` de outro host são rejeitadas, exceto pela origem exata configurada em `ORGANIZE_PUBLIC_ORIGIN`. O frontend usa `/api` na mesma origem do navegador, encaminhada pelo Vite local ou pela Vercel em produção.
 - Erros retornam `{ "error": "mensagem" }` com status 4xx ou 5xx.
 - IDs são UUIDs. Datas são ISO 8601. A posição numérica pode ser enviada para ordenar listas e cartões; novos itens recebem uma posição após o último.
 - `observer` lê; `member` edita; `admin` e `owner` administram. Quadros privados exigem membro explícito do quadro, exceto administradores da área de trabalho.

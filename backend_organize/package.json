@@ -1,0 +1,20 @@
+{
+  "name": "organize-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch index.ts",
+    "start": "node --env-file-if-exists=.env index.ts",
+    "seed": "node --env-file-if-exists=.env seed.ts",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --test-isolation=none tests/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
